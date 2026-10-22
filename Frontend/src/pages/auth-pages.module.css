@@ -1,0 +1,19 @@
+.page { align-items: center; display: flex; justify-content: center; min-height: 74vh; padding: 40px 20px; }
+.card { max-width: 470px; width: 100%; }
+.eyebrow, .error, .success { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.eyebrow { color: var(--maroon); }
+.card h1 { font-size: clamp(2.2rem, 6vw, 3.5rem); margin-top: 10px; }
+.card > p { color: var(--ink-soft); }
+.form { display: grid; gap: 16px; }
+.error { color: var(--kumkum); letter-spacing: 0; text-transform: none; }
+.success { color: var(--leaf); letter-spacing: 0; text-transform: none; }
+.switch { font-size: 13px; text-align: center; }
+.switch a { color: var(--maroon); font-weight: 700; }
+.consentGroup { border: 1px solid var(--staging-hairline); display: grid; gap: 12px; margin: 0; padding: 14px; }
+.consentGroup legend { color: var(--staging-ink); font-family: var(--staging-font); font-size: 13px; font-weight: 700; padding: 0 6px; }
+.consentGroup > p { color: var(--staging-muted); font-family: var(--staging-font); font-size: 12px; margin: 0; }
+.consentChoice { align-items: start; display: flex; gap: 10px; line-height: 1.5; }
+.consentChoice input { accent-color: var(--staging-primary); flex: 0 0 auto; height: 18px; margin-top: 2px; width: 18px; }
+.consentChoice a { color: var(--staging-primary); }
+.consentError { color: var(--staging-error); font-size: 12px; }
+@media (max-width: 420px) { .page { min-height: 78vh; padding: 28px 14px; }.card { padding: 20px 16px; }.card h1 { font-size: clamp(2.2rem, 12vw, 3.2rem); }.card .button { min-height: 46px; width: 100%; } }

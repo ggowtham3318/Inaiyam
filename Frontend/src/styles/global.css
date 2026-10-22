@@ -1,0 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Hind+Madurai:wght@400;500;600&family=Inter:wght@300;400;700&display=swap');
+@import './tokens.css';
+
+* { box-sizing: border-box; }
+html { background: var(--paper); min-width: 320px; }
+body { margin: 0; color: var(--ink); background: var(--paper); font-family: 'DM Sans', sans-serif; font-size: 15px; overflow-x: hidden; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+button:focus, input:focus, select:focus, textarea:focus { outline-color: var(--maroon); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--kumkum); outline-offset: 3px; box-shadow: var(--focus); }
+h1, h2, h3, h4 { font-family: 'DM Sans', sans-serif; font-weight: 700; margin: 0; letter-spacing: -.035em; }
+p { line-height: 1.65; }
+::selection { color: var(--paper); background: var(--maroon); }
+img, svg { max-width: 100%; }
+img { height: auto; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

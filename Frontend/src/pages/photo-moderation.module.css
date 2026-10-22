@@ -1,0 +1,15 @@
+.page { --photo-primary: var(--staging-primary); color: var(--staging-ink); font-family: var(--staging-font); padding: var(--staging-space-3); }
+.eyebrow { color: var(--staging-muted); font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+.lead { color: var(--staging-body); max-width: 640px; }
+.grid { display: grid; gap: var(--staging-space-2); grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: var(--staging-space-3); }
+.card { border: 1px solid var(--staging-hairline); border-radius: 0; box-shadow: none; overflow: hidden; padding: 0; }
+.frame { aspect-ratio: 4 / 3; background: #fafafa; overflow: hidden; }
+.frame img { display: block; height: 100%; object-fit: contain; width: 100%; }
+.actions { display: flex; flex-wrap: wrap; gap: var(--staging-space-1); padding: var(--staging-space-2); }
+.approve, .reject { border-radius: 0; box-shadow: none; font-family: var(--staging-font); min-height: var(--staging-control-height); }
+.approve { background: var(--photo-primary); color: #fff; }
+.approve:hover { background: var(--staging-primary-active); transform: none; }
+.reject { background: #fff; border: 1px solid var(--staging-ink); color: var(--staging-ink); }
+.error { color: var(--staging-error); }
+@media (max-width: 900px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .page { padding: var(--staging-space-2); }.grid { grid-template-columns: 1fr; } }
