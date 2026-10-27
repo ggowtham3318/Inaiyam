@@ -9,7 +9,8 @@ import { useLocation } from 'react-router-dom'
 import styles from './layout.module.css'
 
 export function BrandMark() {
-  return <Link to="/" className={styles.brand} aria-label={`${BRAND_NAME} home`}><span className={styles.brandIcon} aria-hidden="true"><svg viewBox="0 0 28 28" width="21" height="21"><path d="M5 8c4-5 14-5 18 0M5 20c4 5 14 5 18 0M8 5c5 4 5 14 0 18M20 5c-5 4-5 14 0 18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /><circle cx="14" cy="14" r="2.2" fill="currentColor" /></svg></span><span><strong>{BRAND_NAME}</strong></span></Link>
+  const mark = <><span className={styles.brandIcon} aria-hidden="true"><img className={styles.brandEmblem} src="/inaiyam-logo.png" alt="" /></span><span><strong>{BRAND_NAME}</strong></span></>
+  return <div className={styles.brand} role="img" aria-label={BRAND_NAME}>{mark}</div>
 }
 
 export function PublicLayout() {

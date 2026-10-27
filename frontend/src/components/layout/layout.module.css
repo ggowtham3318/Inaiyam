@@ -23,3 +23,7 @@
 .memberNav a.active, .memberNav a:hover { color: var(--maroon); }
 .footerBottom a { color: #f7cbdc; }
 @media (max-width: 720px) { .memberNav { display: none; }.bottomNav a { min-width: 52px; } }
+
+.brandIcon { background: #fff; display: block; flex: 0 0 37px; height: 37px; overflow: hidden; position: relative; width: 37px; }
+.brandEmblem { height: auto; left: -3px; max-width: none; position: absolute; top: 2px; width: 48px; }
+.adminSidebar .brandIcon { background: #fff; }

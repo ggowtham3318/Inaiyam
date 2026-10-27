@@ -1,0 +1,14 @@
+.page { margin: 0 auto; max-width: 900px; padding: 72px 24px 90px; }
+.eyebrow { color: var(--maroon); font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.page h1 { font-size: clamp(2.8rem, 8vw, 5rem); margin: 12px 0; }
+.subtitle { color: var(--ink-soft); font-size: 19px; max-width: 700px; }
+.draft { background: var(--paper-2); border-radius: 10px; color: var(--maroon); font-size: 13px; font-weight: 700; margin: 20px 0; padding: 12px 14px; }
+.content { display: grid; gap: 10px; margin-top: 30px; }
+.section { border-bottom: 1px solid var(--line); padding: 20px 0; }
+.section h2 { font-size: 22px; margin: 0 0 12px; }
+.section p, .section li { color: var(--ink-soft); line-height: 1.7; }
+.section ul { display: grid; gap: 8px; padding-left: 22px; }
+.section a, .related a, .contact a { color: var(--maroon); font-weight: 700; }
+.contact { background: var(--paper-2); border-radius: 14px; line-height: 1.7; margin-top: 24px; padding: 18px; }
+.related { color: var(--ink-soft); display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 560px) { .page { padding: 44px 16px 60px; }.section h2 { font-size: 19px; } }

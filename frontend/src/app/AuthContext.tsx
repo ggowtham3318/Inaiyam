@@ -10,9 +10,13 @@ type AuthContextValue = {
   roleError: string | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
-  signUp: (email: string, password: string, policyVersion: string) => Promise<{ error: Error | null }>
+  signUp: (email: string, password: string, policyVersion: string, profile?: { displayName?: string; gender?: string; dateOfBirth?: string }) => Promise<{ error: Error | null; needsConfirmation: boolean }>
   signOut: () => Promise<{ error: Error | null }>
+  resetPasswordForEmail: (email: string) => Promise<{ error: Error | null }>
+  updatePassword: (password: string) => Promise<{ error: Error | null }>
 }
+
+const NOT_CONFIGURED = 'Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
@@ -85,28 +89,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     roleError,
     loading: loading || roleLoading,
     signIn: async (email, password) => {
-      if (!supabase) return { error: new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.') }
+      if (!supabase) return { error: new Error(NOT_CONFIGURED) }
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       return { error }
     },
-    signUp: async (email, password, policyVersion) => {
-      if (!supabase) return { error: new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.') }
-      const { error } = await supabase.auth.signUp({
+    signUp: async (email, password, policyVersion, profile) => {
+      if (!supabase) return { error: new Error(NOT_CONFIGURED), needsConfirmation: false }
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
+          emailRedirectTo: `${window.location.origin}/login`,
           data: {
             privacy_policy_accepted: true,
             terms_accepted: true,
             policy_version: policyVersion,
+            display_name: profile?.displayName?.trim(),
+            gender: profile?.gender,
+            date_of_birth: profile?.dateOfBirth,
           },
         },
       })
-      return { error }
+      // With email confirmation enabled Supabase returns no session until the link is opened.
+      return { error, needsConfirmation: !error && !data.session }
     },
     signOut: async () => {
       if (!supabase) return { error: null }
       const { error } = await supabase.auth.signOut()
+      return { error }
+    },
+    resetPasswordForEmail: async email => {
+      if (!supabase) return { error: new Error(NOT_CONFIGURED) }
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/reset-password` })
+      return { error }
+    },
+    updatePassword: async password => {
+      if (!supabase) return { error: new Error(NOT_CONFIGURED) }
+      const { error } = await supabase.auth.updateUser({ password })
       return { error }
     },
   }), [loading, role, roleError, roleLoading, session])

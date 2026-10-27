@@ -11,6 +11,8 @@ export type AdminUser = { user_id: string; email: string; status: string; create
 export type PendingProfile = { id: string; user_id: string; display_name: string | null; status: string; city: string | null; created_at: string }
 export type PendingPhoto = { id: string; profile_id: string; uploaded_by: string; storage_bucket: string; storage_path: string; status: string; created_at: string; preview_url: string }
 export type AdminReport = { id: string; reporter_user_id: string; reported_user_id: string; category: string; description: string; status: string; resolution_notes: string | null; created_at: string }
+export type AdminDeletionRequest = { id: string; user_id: string; status: string; reason: string | null; requested_at: string; completed_at: string | null }
+export type AdminContactMessage = { id: string; name: string; email: string; message: string; created_at: string; handled_at: string | null }
 export type CmsPage = { id: string; slug: string; title: string; content: string; status: 'draft' | 'published' | 'archived'; updated_at: string }
 export type CmsStory = { id: string; title: string; story: string; image_path: string | null; is_published: boolean; updated_at: string }
 
@@ -65,6 +67,28 @@ export async function updateReport(id: string, status: 'reviewing' | 'resolved' 
     resolution_notes: resolutionNotes || null,
     resolved_at: status === 'resolved' || status === 'dismissed' ? new Date().toISOString() : null,
   }).eq('id', id)
+  if (error) throw error
+}
+
+export async function getDeletionRequests() {
+  const { data, error } = await requireSupabase().from('account_deletion_requests').select('id,user_id,status,reason,requested_at,completed_at').order('requested_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as AdminDeletionRequest[]
+}
+
+export async function completeDeletionRequest(id: string, reviewerId: string) {
+  const { error } = await requireSupabase().from('account_deletion_requests').update({ status: 'completed', completed_at: new Date().toISOString(), reviewed_by: reviewerId }).eq('id', id)
+  if (error) throw error
+}
+
+export async function getAdminContactMessages() {
+  const { data, error } = await requireSupabase().from('contact_messages').select('id,name,email,message,created_at,handled_at').order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as AdminContactMessage[]
+}
+
+export async function markContactMessageHandled(id: string, staffId: string) {
+  const { error } = await requireSupabase().from('contact_messages').update({ handled_at: new Date().toISOString(), handled_by: staffId }).eq('id', id)
   if (error) throw error
 }
 

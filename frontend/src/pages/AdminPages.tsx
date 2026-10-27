@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ArrowUpRight, Check, Clock3, FileCheck2, Image, RefreshCw, ShieldAlert, Users } from 'lucide-react'
 import { Button, Card, EmptyState, Input, Skeleton } from '../components/ui'
-import { getAdminReports, getAdminStats, getAdminUsers, getCmsPages, getCmsStories, getPendingPhotos, getPendingProfiles, reviewPhoto, saveCmsPage, saveCmsStory, setProfileStatus, updateReport, type AdminReport, type AdminStats, type AdminUser, type CmsPage, type CmsStory, type PendingPhoto, type PendingProfile } from '../lib/adminData'
+import { completeDeletionRequest, getDeletionRequests, getAdminContactMessages, markContactMessageHandled, getAdminReports, getAdminStats, getAdminUsers, getCmsPages, getCmsStories, getPendingPhotos, getPendingProfiles, reviewPhoto, saveCmsPage, saveCmsStory, setProfileStatus, updateReport, type AdminContactMessage, type AdminDeletionRequest, type AdminReport, type AdminStats, type AdminUser, type CmsPage, type CmsStory, type PendingPhoto, type PendingProfile } from '../lib/adminData'
+import { useAuth } from '../app/AuthContext'
 import styles from './admin-pages.module.css'
 import photoStyles from './photo-moderation.module.css'
 
@@ -52,6 +53,25 @@ export function AdminReportsPage() {
   useEffect(() => { void load() }, [])
   async function decide(id: string, status: 'reviewing' | 'resolved' | 'dismissed') { try { await updateReport(id, status, notes[id] || ''); setReports(current => current.map(report => report.id === id ? { ...report, status, resolution_notes: notes[id] || null } : report)) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to update this report.') } }
   return <section className={styles.page}><span className={styles.eyebrow}>Community safety</span><h1>Reports and flags</h1><p className={styles.lead}>Review concerns raised by members and keep a clear resolution trail.</p><AdminState loading={loading} error={error}>{reports.length ? <div className={styles.reportList}>{reports.map(report => <Card key={report.id}><div className={styles.reportHeader}><span className={styles.status}>{report.category.replace('_', ' ')}</span><span className={styles.muted}>{report.status}</span></div><p>{report.description}</p><small className={styles.muted}>Reported {new Date(report.created_at).toLocaleDateString()}</small><Input label="Resolution notes" placeholder="Add a private staff note" value={notes[report.id] ?? report.resolution_notes ?? ''} onChange={event => setNotes(current => ({ ...current, [report.id]: event.target.value }))} /><div className={styles.actions}><Button variant="ghost" onClick={() => void decide(report.id, 'reviewing')}>Mark reviewing</Button><Button onClick={() => void decide(report.id, 'resolved')}>Resolve</Button><Button variant="secondary" onClick={() => void decide(report.id, 'dismissed')}>Dismiss</Button></div></Card>)}</div> : <Card><EmptyState title="No reports to review"><p>The community safety queue is clear.</p></EmptyState></Card>}</AdminState></section>
+}
+
+export function AdminDeletionRequestsPage() {
+  const { user } = useAuth()
+  const [requests, setRequests] = useState<AdminDeletionRequest[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('')
+  async function load() { setLoading(true); setError(''); try { setRequests(await getDeletionRequests()) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to load deletion requests.') } finally { setLoading(false) } }
+  useEffect(() => { void load() }, [])
+  async function markProcessed(id: string) { try { await completeDeletionRequest(id, user!.id); await load() } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to update this request.') } }
+  const ordered = [...requests].sort((a, b) => Number(a.status === 'completed') - Number(b.status === 'completed'))
+  return <section className={styles.page}><span className={styles.eyebrow}>Account operations</span><h1>Deletion requests</h1><p className={styles.lead}>Review member requests to delete their accounts.</p><AdminState loading={loading} error={error}><div className={styles.reportList}>{ordered.length ? ordered.map(request => <Card key={request.id}><div className={styles.reportHeader}><span className={styles.status}>{request.status}</span><span className={styles.muted}>Requested {new Date(request.requested_at).toLocaleString()}</span></div><p>Account user ID: <code>{request.user_id}</code></p>{request.reason && <p>{request.reason}</p>}{request.status !== 'completed' && request.status !== 'rejected' && request.status !== 'cancelled' && <Button onClick={() => void markProcessed(request.id)}>Mark processed</Button>}{request.completed_at && <small className={styles.muted}>Completed {new Date(request.completed_at).toLocaleString()}</small>}</Card>) : <Card><EmptyState title="No deletion requests"><p>New requests will appear here.</p></EmptyState></Card>}</div></AdminState></section>
+}
+
+export function AdminContactMessagesPage() {
+  const { user } = useAuth()
+  const [messages, setMessages] = useState<AdminContactMessage[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('')
+  async function load() { setLoading(true); setError(''); try { setMessages(await getAdminContactMessages()) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to load contact messages.') } finally { setLoading(false) } }
+  useEffect(() => { void load() }, [])
+  async function markHandled(id: string) { try { await markContactMessageHandled(id, user!.id); setMessages(current => current.map(message => message.id === id ? { ...message, handled_at: new Date().toISOString() } : message)) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to update this message.') } }
+  return <section className={styles.page}><span className={styles.eyebrow}>Community inbox</span><h1>Contact messages</h1><p className={styles.lead}>Messages submitted by visitors to the public contact form.</p><AdminState loading={loading} error={error}><div className={styles.reportList}>{messages.length ? messages.map(message => <Card key={message.id}><div className={styles.reportHeader}><a href={`mailto:${message.email}`}>{message.name} · {message.email}</a><span className={styles.status}>{message.handled_at ? 'Handled' : 'New'}</span></div><p className={styles.contactMessageText}>{message.message}</p><small className={styles.muted}>Received {new Date(message.created_at).toLocaleString()}</small>{!message.handled_at && <Button onClick={() => void markHandled(message.id)}>Mark handled</Button>}</Card>) : <Card><EmptyState title="No contact messages"><p>New submissions will appear here.</p></EmptyState></Card>}</div></AdminState></section>
 }
 
 export function AdminCmsPage() {

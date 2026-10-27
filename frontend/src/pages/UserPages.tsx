@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowLeft, CheckCircle2, Heart, MapPin, Send, SlidersHorizontal, Sparkles, Upload, X } from 'lucide-react'
 import { useAuth } from '../app/AuthContext'
-import { Button, Card, EmptyState, Input, Select, Skeleton, Stepper, Toast } from '../components/ui'
+import { Button, Card, EmptyState, Input, Modal, Select, Skeleton, Toast } from '../components/ui'
 import { getOwnProfile, getPhotoPreviewUrl, getProfileDetail, requireSupabase, searchProfiles, type Interest, type ProfileCursor, type PublicProfile } from '../lib/userData'
 import styles from './user-pages.module.css'
 
@@ -19,9 +19,21 @@ function ProfileCard({ profile, shortlisted, onShortlist }: { profile: PublicPro
   return <Card className={styles.profileCard}><div className={styles.profileImage}><Sparkles size={26} /></div><div className={styles.profileCardBody}><div className={styles.cardTitle}><div><h3>{profile.display_name || 'Inaiyam member'}</h3>{profile.age && <span>{profile.age} years</span>}</div>{onShortlist && <button className={styles.iconButton} aria-label={shortlisted ? 'Remove from shortlist' : 'Add to shortlist'} onClick={onShortlist}><Heart size={19} fill={shortlisted ? 'currentColor' : 'none'} /></button>}</div><div className={styles.facts}>{profile.city && <span><MapPin size={14} />{profile.city}</span>}{profile.education_name && <span>{profile.education_name}</span>}{profile.occupation && <span>{profile.occupation}</span>}</div><div className={styles.profileActions}><Link className={styles.viewLink} to={`/app/profile/${profile.id}`}>View profile <ArrowLeft size={15} className={styles.arrow} /></Link><Link className={styles.interestLink} to={`/app/profile/${profile.id}`}>Send interest</Link></div></div></Card>
 }
 
+function getProfileSearchError(cause: unknown) {
+  const error = cause as { code?: string; message?: string } | null
+  if (error?.message?.includes('APPROVED_PROFILE_REQUIRED')) {
+    return 'Your own profile must be approved before you can search. Complete your profile and submit it for review, or sign in with one of the approved local demo accounts.'
+  }
+  if (error?.message?.includes('AUTH_REQUIRED')) {
+    return 'Sign in to an approved profile before searching for matches.'
+  }
+  return cause instanceof Error ? cause.message : 'We could not load profiles right now.'
+}
+
 export function SearchPage() {
+  const [searchParams] = useSearchParams()
   const [profiles, setProfiles] = useState<PublicProfile[]>([]); const [shortlisted, setShortlisted] = useState<Set<string>>(new Set()); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [toast, setToast] = useState(''); const [page, setPage] = useState(0); const [hasMore, setHasMore] = useState(false); const [cursors, setCursors] = useState<(ProfileCursor | undefined)[]>([undefined])
-  const { register, handleSubmit, watch } = useForm({ defaultValues: { gender: '', ageMin: '', ageMax: '', city: '', state: '' } })
+  const { register, handleSubmit, watch } = useForm({ defaultValues: { gender: '', ageMin: searchParams.get('ageMin') ?? '', ageMax: searchParams.get('ageMax') ?? '', city: searchParams.get('city') ?? '', state: '' } })
   const filters = watch()
   async function load(nextPage = 0) {
     setLoading(true); setError('')
@@ -39,7 +51,7 @@ export function SearchPage() {
         return updated
       })
     }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'We could not load profiles right now.') }
+    catch (cause) { setError(getProfileSearchError(cause)) }
     finally { setLoading(false) }
   }
   // Load only on mount; filter changes are submitted explicitly by the user.
@@ -93,21 +105,19 @@ const profileSchema = z.object({
   partner_preferences: z.string().trim().min(10, 'Tell us a little about the partner you hope to meet.').max(3000),
 })
 type ProfileForm = z.infer<typeof profileSchema>
-type Lookup = { id: string; name: string }
-const steps = [
-  { title: 'Basic information', fields: ['display_name', 'date_of_birth', 'gender', 'marital_status_id'] as const },
-  { title: 'Location and work', fields: ['city', 'state', 'country', 'occupation'] as const },
-  { title: 'About you', fields: ['about_me'] as const },
-  { title: 'Partner preferences', fields: ['partner_preferences'] as const },
-  { title: 'Photos and preview', fields: [] as const },
-]
-
+type Lookup = { id: string; code: string; name: string }
+const maritalStatusLabels: Record<string, string> = {
+  never_married: 'Single',
+  divorced: 'Divorced',
+  separated: 'Separated',
+  widowed: 'Widowed',
+}
 export function MyProfilePage() {
   const { user } = useAuth()
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [notice, setNotice] = useState('')
-  const [step, setStep] = useState(0); const [maritalStatuses, setMaritalStatuses] = useState<Lookup[]>([]); const [photos, setPhotos] = useState<{ id?: string; path: string; status: string; preview: string }[]>([])
-  const { register, handleSubmit, reset, getValues, watch, trigger, formState: { errors, isSubmitting } } = useForm<ProfileForm>({ resolver: zodResolver(profileSchema), defaultValues: { country: 'India', gender: 'other', partner_preferences: '' } })
+  const [maritalStatuses, setMaritalStatuses] = useState<Lookup[]>([]); const [photos, setPhotos] = useState<{ id?: string; path: string; status: string; preview: string }[]>([])
+  const { register, control, reset, getValues, getFieldState, watch, trigger, formState: { errors } } = useForm<ProfileForm>({ resolver: zodResolver(profileSchema), defaultValues: { country: 'India', gender: 'other', marital_status_id: '', partner_preferences: '' } })
   const values = watch()
   const completed = [values.display_name, values.date_of_birth, values.gender, values.marital_status_id, values.city, values.state, values.occupation, values.about_me, values.partner_preferences].filter(Boolean).length
   const completion = Math.round((completed / 9) * 100)
@@ -117,15 +127,27 @@ export function MyProfilePage() {
     const client = requireSupabase()
     void Promise.all([
       getOwnProfile(user.id),
-      client.from('lookup_marital_statuses').select('id,name').eq('is_active', true).order('name'),
+      client.from('lookup_marital_statuses').select('id,code,name').eq('is_active', true),
     ]).then(async ([data, lookupResult]) => {
       if (lookupResult.error) throw lookupResult.error
-      setMaritalStatuses((lookupResult.data ?? []) as Lookup[])
+      const statuses = (lookupResult.data ?? []) as Lookup[]
+      setMaritalStatuses(statuses
+        .filter(item => item.code in maritalStatusLabels)
+        .map(item => ({ ...item, name: maritalStatusLabels[item.code] }))
+        .sort((left, right) => Object.keys(maritalStatusLabels).indexOf(left.code) - Object.keys(maritalStatusLabels).indexOf(right.code)))
       if (data) {
         setProfile(data as Record<string, unknown>)
         const { data: preference } = await client.from('partner_preferences').select('additional_preferences').eq('profile_id', data.id).maybeSingle()
         const description = preference?.additional_preferences && typeof preference.additional_preferences === 'object' && 'description' in preference.additional_preferences ? String(preference.additional_preferences.description) : ''
-        reset({ ...data, partner_preferences: description } as ProfileForm)
+        reset({
+          ...data,
+          display_name: data.display_name ?? '',
+          date_of_birth: data.date_of_birth ?? '',
+          gender: data.gender ?? 'other',
+          marital_status_id: data.marital_status_id ?? '',
+          country: data.country ?? 'India',
+          partner_preferences: description,
+        } as ProfileForm)
       }
       if (data?.id) {
         const { data: existingPhotos, error: photoError } = await client.from('profile_photos').select('id,storage_path,status,storage_bucket').eq('profile_id', data.id).order('created_at')
@@ -158,17 +180,47 @@ export function MyProfilePage() {
     }
     return data
   }
-  async function nextStep() {
+  async function save() {
     setError(''); setNotice('')
-    if (step < 4 && !(await trigger(steps[step].fields as never))) return
-    try { await saveDraft(); setStep(current => Math.min(current + 1, 4)); setNotice('Draft saved.') } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save your draft.') }
+    try { await saveDraft(); setNotice('Your draft has been saved.') } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save your draft.') }
   }
-  async function save(valuesToSave: ProfileForm) { try { await saveDraft(valuesToSave); setNotice('Your draft has been saved.') } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save your draft.') } }
   async function submitForReview() {
     setError(''); setNotice('')
     const valid = await trigger()
-    if (!valid || !profile?.id) { setError('Complete the required steps before submitting for review.'); return }
-    try { await saveDraft(); const { error: submitError } = await requireSupabase().rpc('submit_profile_for_review', { p_profile_id: profile.id }); if (submitError) throw submitError; setProfile(current => current ? { ...current, status: 'pending_review', rejection_reason: null } : current); setNotice('Your profile is now awaiting review.') } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to submit your profile.') }
+    if (!valid) {
+      const fields: { name: keyof ProfileForm; label: string }[] = [
+        { name: 'display_name', label: 'Display name' },
+        { name: 'date_of_birth', label: 'Date of birth' },
+        { name: 'gender', label: 'Gender' },
+        { name: 'marital_status_id', label: 'Marital status' },
+        { name: 'city', label: 'City' },
+        { name: 'state', label: 'State' },
+        { name: 'country', label: 'Country' },
+        { name: 'occupation', label: 'Occupation' },
+        { name: 'about_me', label: 'Short introduction' },
+        { name: 'partner_preferences', label: 'Partner preferences' },
+      ]
+      const messages = fields
+        .map(field => {
+          const message = getFieldState(field.name).error?.message
+          return message ? `${field.label}: ${message}` : null
+        })
+        .filter((message): message is string => Boolean(message))
+      setError(messages.length ? `Please correct these fields: ${messages.join(' ')}` : 'Please check the required fields marked in the form.')
+      return
+    }
+    if (!profile?.id) {
+      setError('Your profile record has not loaded. Refresh the page and try again; if this continues, sign out and back in.')
+      return
+    }
+    try {
+      const savedProfile = await saveDraft()
+      const profileId = savedProfile?.id ?? profile.id
+      const { error: submitError } = await requireSupabase().rpc('submit_profile_for_review', { p_profile_id: profileId })
+      if (submitError) throw submitError
+      setProfile(current => current ? { ...current, status: 'pending_review', rejection_reason: null } : current)
+      setNotice('Your profile is now awaiting review.')
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to submit your profile.') }
   }
   async function uploadPhoto(file: File) {
     if (!user || !profile?.id) { setError('Save your profile before adding photos.'); return }
@@ -206,11 +258,60 @@ export function MyProfilePage() {
   }
   if (loading) return <DataState loading error="">{null}</DataState>
   const status = String(profile?.status || 'draft')
-  return <section><div className={styles.profileHeader}><div><span className={styles.eyebrow}>Your story</span><h1>Create your profile</h1><p className={styles.lead}>Save as you go. You can finish later, and nothing is published before review.</p></div><div className={styles.completion}><strong>{completion}%</strong><span>complete</span><div><i style={{ width: `${completion}%` }} /></div></div></div><Card className={styles.formCard}><div className={styles.statusRow}><span>Status: <strong>{status.replace('_', ' ')}</strong></span>{status === 'approved' && <span className={styles.verified}><CheckCircle2 size={16} /> Verified</span>}</div>{status === 'rejected' && <p className={styles.rejection} role="alert"><strong>Changes requested:</strong> {String(profile?.rejection_reason || 'Please update your profile and resubmit.')}</p>}<div className={styles.stepHeader}><div><span className={styles.stepLabel}>Step {step + 1} of 5</span><h2>{steps[step].title}</h2></div><Stepper current={step + 1} total={5} /></div><form className={styles.profileForm} onSubmit={handleSubmit(save)}>{step === 0 && <div className={styles.twoCol}><Input label="Display name" hint="This is the name shown on your public profile." error={errors.display_name?.message} {...register('display_name')} /><Input label="Date of birth" type="date" error={errors.date_of_birth?.message} {...register('date_of_birth')} /><Select label="Profile gender" {...register('gender')}><option value="other">Prefer to describe later</option><option value="female">Woman</option><option value="male">Man</option></Select><Select label="Marital status" {...register('marital_status_id')}><option value="">Choose one</option>{maritalStatuses.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></div>}{step === 1 && <div className={styles.twoCol}><Input label="City" error={errors.city?.message} {...register('city')} /><Input label="State" error={errors.state?.message} {...register('state')} /><Input label="Country" error={errors.country?.message} {...register('country')} /><Input label="Occupation" error={errors.occupation?.message} {...register('occupation')} /></div>}{step === 2 && <label className={styles.textareaLabel}>Short introduction<textarea rows={9} placeholder="Share your values, interests and hopes." {...register('about_me')} />{errors.about_me && <span className={styles.error}>{errors.about_me.message}</span>}</label>}{step === 3 && <label className={styles.textareaLabel}>What are you looking for in a partner?<textarea rows={9} placeholder="Share the values, location or lifestyle preferences that matter to you." {...register('partner_preferences')} />{errors.partner_preferences && <span className={styles.error}>{errors.partner_preferences.message}</span>}</label>}{step === 4 && <div className={styles.photoStep}><div className={styles.photoIntro}><Upload size={22} /><div><h3>About me and photos</h3><p>Add a clear photo if you are ready. It will be reviewed before it appears to other members.</p></div></div><label className={styles.uploadBox}><Upload size={22} /><span>Choose a photo</span><small>JPG, PNG or WEBP · up to 5 MB</small><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.target.files?.[0]; if (file) void uploadPhoto(file); event.currentTarget.value = '' }} /></label><div className={styles.photoGrid}>{photos.map(photo => <div className={styles.photoItem} key={photo.id || photo.path}>{photo.preview ? <img src={photo.preview} alt="Your profile upload" /> : <div className={styles.photoUnavailable}>Preview unavailable</div>}<span>{photo.status === 'pending' ? 'Waiting for review' : photo.status}</span><button type="button" aria-label="Remove photo" onClick={() => void removePhoto(photo)}><X size={15} /></button></div>)}</div></div>}{error && <p className={styles.error} role="alert">{error}</p>}{notice && <p className={styles.success} role="status">{notice}</p>}<div className={styles.formActions}>{step > 0 && <Button type="button" variant="secondary" onClick={() => setStep(current => current - 1)}>Previous</Button>}{step < 4 ? <Button type="button" onClick={() => void nextStep()}>Save and continue</Button> : <><Button type="submit" variant="secondary" disabled={isSubmitting}>Save draft</Button>{(status === 'draft' || status === 'rejected') && <Button type="button" onClick={() => void submitForReview()}>Finish preview and submit</Button>}</>}</div></form></Card></section>
+  return <section>
+    <div className={styles.profileHeader}>
+      <div><span className={styles.eyebrow}>Your story</span><h1>Create your profile</h1><p className={styles.lead}>Complete your details in one form. You can save a draft and return later; nothing is published before review.</p></div>
+      <div className={styles.completion}><strong>{completion}%</strong><span>complete</span><div><i style={{ width: `${completion}%` }} /></div></div>
+    </div>
+    <Card className={styles.formCard}>
+      <div className={styles.statusRow}><span>Status: <strong>{status.replace('_', ' ')}</strong></span>{status === 'approved' && <span className={styles.verified}><CheckCircle2 size={16} /> Verified</span>}</div>
+      {status === 'rejected' && <p className={styles.rejection} role="alert"><strong>Changes requested:</strong> {String(profile?.rejection_reason || 'Please update your profile and resubmit.')}</p>}
+      <form className={styles.profileForm} onSubmit={event => { event.preventDefault(); void save() }}>
+        <section className={styles.profileSection}>
+          <h2>Basic information</h2>
+          <div className={styles.twoCol}>
+            <Input label="Display name" hint="This is the name shown on your public profile." error={errors.display_name?.message} {...register('display_name')} />
+            <Input label="Date of birth" type="date" error={errors.date_of_birth?.message} {...register('date_of_birth')} />
+            <div><Select label="Profile gender" {...register('gender')}><option value="other">Prefer to describe later</option><option value="female">Woman</option><option value="male">Man</option></Select>{errors.gender && <small className={styles.error}>{errors.gender.message}</small>}</div>
+            <div><Controller control={control} name="marital_status_id" render={({ field }) => <Select label="Marital status" name={field.name} value={field.value ?? ''} onBlur={field.onBlur} onChange={field.onChange} ref={field.ref}><option value="">Choose one</option>{maritalStatuses.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</Select>} />{errors.marital_status_id && <small className={styles.error}>{errors.marital_status_id.message}</small>}</div>
+          </div>
+        </section>
+        <section className={styles.profileSection}>
+          <h2>Location and work</h2>
+          <div className={styles.twoCol}>
+            <Input label="City" error={errors.city?.message} {...register('city')} />
+            <Input label="State" error={errors.state?.message} {...register('state')} />
+            <Input label="Country" error={errors.country?.message} {...register('country')} />
+            <Input label="Occupation" error={errors.occupation?.message} {...register('occupation')} />
+          </div>
+        </section>
+        <section className={styles.profileSection}>
+          <h2>About you</h2>
+          <label className={styles.textareaLabel}>Short introduction<textarea rows={6} placeholder="Share your values, interests and hopes." aria-invalid={Boolean(errors.about_me)} {...register('about_me')} />{errors.about_me && <span className={styles.error}>{errors.about_me.message}</span>}</label>
+        </section>
+        <section className={styles.profileSection}>
+          <h2>Partner preferences</h2>
+          <label className={styles.textareaLabel}>What are you looking for in a partner?<textarea rows={6} placeholder="Share the values, location or lifestyle preferences that matter to you." aria-invalid={Boolean(errors.partner_preferences)} {...register('partner_preferences')} />{errors.partner_preferences && <span className={styles.error}>{errors.partner_preferences.message}</span>}</label>
+        </section>
+        <section className={`${styles.profileSection} ${styles.photoStep}`}>
+          <h2>Profile photo</h2>
+          <div className={styles.photoIntro}><Upload size={22} /><div><h3>Add a photo (optional)</h3><p>Your photo will be reviewed before it appears to other members.</p></div></div>
+          <label className={styles.uploadBox}><Upload size={22} /><span>Choose a photo</span><small>JPG, PNG or WEBP · up to 5 MB</small><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.target.files?.[0]; if (file) void uploadPhoto(file); event.currentTarget.value = '' }} /></label>
+          <div className={styles.photoGrid}>{photos.map(photo => <div className={styles.photoItem} key={photo.id || photo.path}>{photo.preview ? <img src={photo.preview} alt="Your profile upload" /> : <div className={styles.photoUnavailable}>Preview unavailable</div>}<span>{photo.status === 'pending' ? 'Waiting for review' : photo.status}</span><button type="button" aria-label="Remove photo" onClick={() => void removePhoto(photo)}><X size={15} /></button></div>)}</div>
+        </section>
+        {error && <p className={styles.error} role="alert">{error}</p>}
+        {notice && <p className={styles.success} role="status">{notice}</p>}
+        <div className={styles.formActions}>
+          <Button type="submit" variant="secondary">Save draft</Button>
+          {(status === 'draft' || status === 'rejected') && <Button type="button" onClick={() => void submitForReview()}>Submit profile for review</Button>}
+        </div>
+      </form>
+    </Card>
+  </section>
 }
 
 export function ProfileDetailPage() {
-  const { profileId } = useParams(); const [profile, setProfile] = useState<PublicProfile | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [actionError, setActionError] = useState(''); const [notice, setNotice] = useState(''); const [message, setMessage] = useState(''); const [modalOpen, setModalOpen] = useState(false)
+  const { profileId } = useParams(); const navigate = useNavigate(); const [profile, setProfile] = useState<PublicProfile | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [actionError, setActionError] = useState(''); const [notice, setNotice] = useState(''); const [message, setMessage] = useState(''); const [modalOpen, setModalOpen] = useState(false); const [safetyAction, setSafetyAction] = useState<'report' | 'block' | null>(null); const [reportCategory, setReportCategory] = useState('fake_profile'); const [reportDescription, setReportDescription] = useState(''); const [blockReason, setBlockReason] = useState('Safety concern'); const [safetyBusy, setSafetyBusy] = useState(false)
   useEffect(() => { if (!profileId) return; void getProfileDetail(profileId).then(setProfile).catch(cause => setError(cause instanceof Error ? cause.message : 'Unable to load this profile.')).finally(() => setLoading(false)) }, [profileId])
   async function sendInterest() {
     if (!profile) return
@@ -218,8 +319,7 @@ export function ProfileDetailPage() {
     try {
       const { error: rpcError } = await requireSupabase().rpc('send_interest', { p_receiver_profile_id: profile.id, p_message: message || null })
       if (rpcError) throw rpcError
-      setNotice('Your interest has been sent.')
-      setModalOpen(false)
+      navigate('/app/interests?tab=sent')
     } catch (cause) { setActionError(cause instanceof Error ? cause.message : 'Unable to send this interest.') }
   }
   async function shortlist() {
@@ -231,7 +331,27 @@ export function ProfileDetailPage() {
       setNotice(data ? 'Added to your shortlist.' : 'Removed from your shortlist.')
     } catch (cause) { setActionError(cause instanceof Error ? cause.message : 'Unable to update your shortlist.') }
   }
-  return <section><Link className={styles.backLink} to="/app/search"><ArrowLeft size={16} />Back to search</Link><DataState loading={loading} error={error}>{profile && <div className={styles.detailGrid}><div className={styles.detailPhoto}><Sparkles size={42} /></div><Card><span className={styles.eyebrow}>Profile</span><h1>{profile.display_name || 'Inaiyam member'}</h1><div className={styles.detailFacts}>{profile.age && <span>{profile.age} years</span>}{profile.city && <span><MapPin size={15} />{profile.city}</span>}{profile.education_name && <span>{profile.education_name}</span>}</div><p>{profile.about_me || 'This member is building their story on Inaiyam Matrimony.'}</p><div className={styles.formActions}><Button icon={<Heart size={16} />} onClick={() => void shortlist()}>Shortlist</Button><Button variant="secondary" icon={<Send size={16} />} onClick={() => setModalOpen(true)}>Send interest</Button></div>{notice && <p className={styles.success} role="status">{notice}</p>}{actionError && <p className={styles.error} role="alert">{actionError}</p>}</Card></div>}</DataState>{modalOpen && <div className={styles.inlineModal}><Card><h2>Send a kind first message</h2><Input label="Optional message" placeholder="A simple hello goes a long way." value={message} onChange={event => setMessage(event.target.value)} /><div className={styles.formActions}><Button onClick={() => void sendInterest()}>Send interest</Button><Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button></div></Card></div>}</section>
+  async function submitSafetyAction() {
+    if (!profile || !safetyAction) return
+    setSafetyBusy(true); setActionError('')
+    try {
+      const client = requireSupabase()
+      if (safetyAction === 'report') {
+        const { error: rpcError } = await client.rpc('report_profile', { p_profile_id: profile.id, p_category: reportCategory, p_description: reportDescription.trim() })
+        if (rpcError) throw rpcError
+        setNotice('Thank you. Your report has been sent to our team for review.')
+      } else {
+        const { error: rpcError } = await client.rpc('block_profile', { p_profile_id: profile.id, p_reason: blockReason })
+        if (rpcError) throw rpcError
+        navigate('/app/search', { replace: true })
+      }
+      setSafetyAction(null); setReportDescription('')
+    } catch (cause) { setActionError(cause instanceof Error ? cause.message : `Unable to ${safetyAction} this profile.`) }
+    finally { setSafetyBusy(false) }
+  }
+  const canSubmitReport = reportDescription.trim().length >= 10 && reportDescription.trim().length <= 1000
+  const safetyTitle = safetyAction === 'report' ? 'Report this profile?' : 'Block this profile?'
+  return <section><Link className={styles.backLink} to="/app/search"><ArrowLeft size={16} />Back to search</Link><DataState loading={loading} error={error}>{profile && <div className={styles.detailGrid}><div className={styles.detailPhoto}><Sparkles size={42} /></div><Card><span className={styles.eyebrow}>Profile</span><h1>{profile.display_name || 'Inaiyam member'}</h1><div className={styles.detailFacts}>{profile.age && <span>{profile.age} years</span>}{profile.city && <span><MapPin size={15} />{profile.city}</span>}{profile.education_name && <span>{profile.education_name}</span>}</div><p>{profile.about_me || 'This member is building their story on Inaiyam Matrimony.'}</p><div className={styles.formActions}><Button icon={<Heart size={16} />} onClick={() => void shortlist()}>Shortlist</Button><Button variant="secondary" icon={<Send size={16} />} onClick={() => setModalOpen(true)}>Send interest</Button></div><div className={styles.safetyActions}><button type="button" onClick={() => { setActionError(''); setSafetyAction('report') }}>Report profile</button><button type="button" onClick={() => { setActionError(''); setSafetyAction('block') }}>Block profile</button></div>{notice && <p className={styles.success} role="status">{notice}</p>}{actionError && <p className={styles.error} role="alert">{actionError}</p>}</Card></div>}</DataState>{modalOpen && <div className={styles.inlineModal}><Card><h2>Send a kind first message</h2><Input label="Optional message" placeholder="A simple hello goes a long way." value={message} onChange={event => setMessage(event.target.value)} /><div className={styles.formActions}><Button onClick={() => void sendInterest()}>Send interest</Button><Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button></div></Card></div>}<Modal title={safetyTitle} open={Boolean(safetyAction)} onClose={() => !safetyBusy && setSafetyAction(null)}><div className={styles.safetyDialog}>{safetyAction === 'report' ? <><p>Choose the closest reason and add enough detail for our team to review it.</p><Select label="Report reason" value={reportCategory} onChange={event => setReportCategory(event.target.value)}><option value="fake_profile">Fake or misleading profile</option><option value="harassment">Harassment</option><option value="scam">Scam or suspicious behavior</option><option value="inappropriate_content">Inappropriate content</option><option value="underage">Underage user</option><option value="other">Other</option></Select><label className={styles.textareaLabel}>Details<textarea rows={4} maxLength={1000} value={reportDescription} onChange={event => setReportDescription(event.target.value)} placeholder="Describe what concerned you (10–1,000 characters)." /></label><small>{reportDescription.trim().length}/1,000 characters</small></> : <><p>Blocking hides each other’s profiles from search and profile details and stops further interactions.</p><Select label="Reason for blocking" value={blockReason} onChange={event => setBlockReason(event.target.value)}><option>Safety concern</option><option>Unwanted contact</option><option>Inappropriate behavior</option><option>Other</option></Select><p className={styles.muted}>You can continue using Inaiyam. This profile will no longer be available to you.</p></>}{actionError && <p className={styles.error} role="alert">{actionError}</p>}<div className={styles.formActions}><Button variant="secondary" onClick={() => setSafetyAction(null)} disabled={safetyBusy}>Cancel</Button><Button onClick={() => void submitSafetyAction()} disabled={safetyBusy || (safetyAction === 'report' && !canSubmitReport)}>{safetyBusy ? 'Submitting…' : safetyAction === 'report' ? 'Send report' : 'Confirm block'}</Button></div></div></Modal></section>
 }
 
 export function ShortlistPage() {
@@ -248,7 +368,7 @@ export function ShortlistPage() {
 }
 
 export function InterestsPage() {
-  const { user } = useAuth(); const [interests, setInterests] = useState<Interest[]>([]); const [tab, setTab] = useState<'received' | 'sent' | 'accepted'>('received'); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [actionError, setActionError] = useState('')
+  const { user } = useAuth(); const [searchParams, setSearchParams] = useSearchParams(); const initialTab = searchParams.get('tab'); const [interests, setInterests] = useState<Interest[]>([]); const [tab, setTab] = useState<'received' | 'sent' | 'accepted'>(initialTab === 'sent' || initialTab === 'accepted' ? initialTab : 'received'); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [actionError, setActionError] = useState('')
   const load = useCallback(async () => {
     if (!user) return
     try {
@@ -285,7 +405,7 @@ export function InterestsPage() {
       <h1>Interests</h1>
       <div className={styles.interestTabs}>
         {(['received', 'sent', 'accepted'] as const).map(item => (
-          <button className={tab === item ? styles.activeTab : ''} key={item} onClick={() => setTab(item)}>
+          <button className={tab === item ? styles.activeTab : ''} key={item} onClick={() => { setTab(item); setSearchParams({ tab: item }) }}>
             {item[0].toUpperCase() + item.slice(1)}
           </button>
         ))}

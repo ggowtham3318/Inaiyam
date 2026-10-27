@@ -16,11 +16,31 @@ from public views and search.
 Use Supabase Auth email/password methods. Local seed users are development-only.
 
 ```ts
-await supabase.auth.signUp({ email, password })
+await supabase.auth.signUp({
+  email,
+  password,
+  options: {
+    data: {
+      privacy_policy_accepted: true,
+      terms_accepted: true,
+      policy_version: 'v1',
+    },
+  },
+})
 await supabase.auth.signInWithPassword({ email, password })
 ```
 
+The `auth.users` trigger requires both consent flags and policy version `v1`. It writes
+both consent records server-side; browsers cannot insert or mutate those records.
+
 Production email confirmation must be enabled.
+
+The first-step signup form also sends `display_name`, `profile_for`, `gender`, and
+`date_of_birth` in auth user metadata. Migration `017_signup_profile_basics.sql`
+persists these values to the owner profile when the auth user is created. Apply that
+migration before deploying the updated signup UI. Phone OTP signup/login and phone
+verification are not implemented by this backend; the UI must not claim a phone is
+verified or that an OTP was sent. Email/password recovery is the supported flow.
 
 ## Public views and RPCs
 
@@ -48,7 +68,9 @@ const { data, error } = await supabase.rpc('get_profile_detail', {
 
 Authenticated callers with an approved, non-deleted profile receive approved,
 non-deleted public profiles. It supports gender, age, religion, caste, state, city,
-education, limit, and offset. It does not return exact address or contact data.
+education, a 1–50 result limit, and descending keyset cursors (`created_at`, `id`).
+It does not return auth user IDs, exact address, or contact data. A missing gender
+filter defaults to the opposite gender for male/female accounts.
 
 ```ts
 const { data, error } = await supabase.rpc('search_profiles', {
@@ -60,8 +82,9 @@ const { data, error } = await supabase.rpc('search_profiles', {
   p_state: 'Tamil Nadu',
   p_city: null,
   p_education_id: null,
-  p_limit: 20,
-  p_offset: 0
+  p_cursor_created_at: null,
+  p_cursor_id: null,
+  p_limit: 20
 })
 ```
 
@@ -80,14 +103,16 @@ Soft deletion is performed by staff through `admin_set_profile_status` with
 
 ## Interests
 
-### `send_interest(p_receiver_user_id, p_message)`
+### `send_interest(p_receiver_profile_id, p_message)`
 
-Creates an interest with `sender_user_id = auth.uid()`. Both profiles must be
-approved and non-deleted. Self-interests and duplicate open interests fail.
+Creates an interest with `sender_user_id = auth.uid()`. The target is supplied as a
+public profile ID and resolved server-side. Both profiles must be approved and
+non-deleted. Self-interests, blocked pairs, duplicate open interests, messages over
+500 characters, and requests above the daily cap fail.
 
 ```ts
 await supabase.rpc('send_interest', {
-  p_receiver_user_id: targetUserId,
+  p_receiver_profile_id: targetProfileId,
   p_message: 'Hello'
 })
 ```
@@ -117,8 +142,9 @@ Interests are readable only by their sender, receiver, or staff.
 
 Owners maintain their own `user_contact_details` row. Other users must call
 `get_contact_details`; direct table reads do not reveal another user's contact data.
-The target and viewer must have approved, non-deleted profiles and an accepted
-interest in either direction. Staff may retrieve contact data for moderation.
+The target and viewer must have approved, non-deleted profiles, an accepted interest
+in either direction, and no block between them. Staff contact access is separate and
+must use the audited `admin_get_contact` RPC with a required reason.
 
 ```ts
 const { data, error } = await supabase.rpc('get_contact_details', {
@@ -137,6 +163,9 @@ const { data, error } = await supabase.rpc('get_contact_details', {
 
 All buckets are private and limited to 5 MB. Photo buckets accept JPEG, PNG, and
 WebP. Horoscope files accept JPEG, PNG, and PDF. CMS assets additionally accept SVG.
+Set the `APP_ALLOWED_ORIGINS` Edge Function secret to a comma-separated list of exact
+staging/local origins required for browser use. Keep `SUPABASE_SERVICE_ROLE_KEY`
+server-side as a function secret only; never expose it as a `VITE_*` variable.
 
 ```ts
 await supabase.storage
@@ -144,13 +173,19 @@ await supabase.storage
   .upload(`${user.id}/photo.jpg`, file, { contentType: 'image/jpeg' })
 ```
 
-After creating the matching `profile_photos` row through `add_profile_photo`, staff
-can review it with `admin_review_photo`.
+After creating the matching `profile_photos` row through `add_profile_photo`, the owner
+and authorized staff create short-lived signed URLs for private previews. Staff review
+must call the `review-photo` Edge Function with `{ photo_id, status, reason? }`; it
+validates staff access and pending state, copies approval into an owner-derived path,
+updates the row through `admin_review_photo`, then removes the pending object. Do not
+call `admin_review_photo` directly from the browser.
 
 ## Shortlists
 
 `toggle_shortlist(p_profile_id)` adds or removes an approved profile from the
-authenticated user's shortlist. The `shortlists` table is owner-only.
+authenticated user's shortlist. The `shortlists` table is owner-only. Search uses a
+keyset cursor (`created_at`, `id`); pass both cursor fields from the last returned row
+for the next page.
 
 ```ts
 await supabase.rpc('toggle_shortlist', { p_profile_id: profileId })

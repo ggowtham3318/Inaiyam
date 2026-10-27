@@ -165,7 +165,7 @@ begin
   update app.profiles set status = p_status, reviewed_at = now(), reviewed_by = auth.uid(), rejection_reason = p_reason, deleted_at = case when p_status = 'deleted' then now() else null end
   where id = p_profile_id and status <> 'deleted' returning * into v_profile;
   if not found then raise exception 'PROFILE_NOT_FOUND' using errcode = 'P0001'; end if;
-  insert into app.audit_logs(actor_user_id, actor_role, action, target_table, target_id, after_data) values (auth.uid(), case when app.is_admin() then 'admin' else 'moderator' end, 'review_profile', 'profiles', p_profile_id, to_jsonb(v_profile));
+  insert into app.audit_logs(actor_user_id, actor_role, action, target_table, target_id, after_data) values (auth.uid(), (case when app.is_admin() then 'admin' else 'moderator' end)::app.user_role, 'review_profile', 'profiles', p_profile_id, to_jsonb(v_profile));
   return v_profile;
 end $$;
 
@@ -180,7 +180,7 @@ begin
   update app.profile_photos set status = p_status, storage_bucket = case when p_status = 'approved' then 'photos-approved' else storage_bucket end, reviewed_at = now(), reviewed_by = auth.uid(), rejection_reason = p_reason
   where id = p_photo_id returning * into v_photo;
   if not found then raise exception 'PHOTO_NOT_FOUND' using errcode = 'P0001'; end if;
-  insert into app.audit_logs(actor_user_id, actor_role, action, target_table, target_id, after_data) values (auth.uid(), case when app.is_admin() then 'admin' else 'moderator' end, 'review_photo', 'profile_photos', p_photo_id, to_jsonb(v_photo));
+  insert into app.audit_logs(actor_user_id, actor_role, action, target_table, target_id, after_data) values (auth.uid(), (case when app.is_admin() then 'admin' else 'moderator' end)::app.user_role, 'review_photo', 'profile_photos', p_photo_id, to_jsonb(v_photo));
   return v_photo;
 end $$;
 
