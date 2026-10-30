@@ -39,8 +39,8 @@ The first-step signup form also sends `display_name`, `profile_for`, `gender`, a
 `date_of_birth` in auth user metadata. Migration `017_signup_profile_basics.sql`
 persists these values to the owner profile when the auth user is created. Apply that
 migration before deploying the updated signup UI. Phone OTP signup/login and phone
-verification are not implemented by this backend; the UI must not claim a phone is
-verified or that an OTP was sent. Email/password recovery is the supported flow.
+verification use the Auth SMS hook and the `send-sms` Edge Function. Phone OTP login
+is limited to password reset; normal login remains email/password.
 
 ## Public views and RPCs
 
@@ -231,3 +231,16 @@ RPCs return explicit database errors such as `AUTH_REQUIRED`,
 `APPROVED_PROFILE_REQUIRED`, `CONTACT_NOT_AVAILABLE`, `INTEREST_NOT_FOUND`, and
 `STAFF_REQUIRED`. The frontend should display a user-safe message and log the
 operation context without logging contact data or access tokens.
+
+## OTP verification and recovery
+
+Email and phone verification are currently non-blocking. Signup proceeds to profile completion without an OTP; verification badges still reflect Auth confirmation timestamps. OTP resend is limited to once every 30 seconds when verification is enabled. `app.is_fully_verified()` currently allows any authenticated user so interactions, profile submission, and contact access remain available. Public profile search/detail rows expose only `email_verified` and `phone_verified` booleans.
+
+Login never sends an SMS automatically. Password reset supports email recovery OTP and phone SMS OTP. Reset requests always return the same generic confirmation message. The SMS hook requires `SEND_SMS_HOOK_SECRET`; configure `MSG91_AUTH_KEY` and the DLT-approved `MSG91_TEMPLATE_ID` for delivery. `MOCK_SMS=true` is for local builds only.
+
+Local Auth test OTP: `+919876543210` / `123456`. Confirmation and recovery email templates display `{{ .Token }}`. The local Inbucket UI is at http://localhost:54324.
+
+For local startup, keep `SEND_SMS_HOOK_SECRET` in the ignored project `.env` file in
+`v1,whsec_<base64>` format (generate with `openssl rand -base64 32`). Configure the
+same value in the Edge Function environment; `send-sms` strips the version prefix
+before passing the key to `standardwebhooks`.

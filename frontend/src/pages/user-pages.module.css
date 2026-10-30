@@ -6,3 +6,8 @@
 .muted { color: var(--ink-soft); font-size: 13px; }
 .profileSection { border-bottom: 1px solid var(--line); display: grid; gap: 16px; padding-bottom: 20px; }
 .profileSection h2 { font-size: 20px; margin: 0; }
+.verificationBadges { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 18px; }
+.emailField { position: relative; }
+.emailField input { padding-right: 40px; }
+.emailField .verifiedTick { bottom: 15px; margin: 0; position: absolute; right: 12px; }
+.verifiedTick { color: #25804b; display: inline-flex; margin-left: 6px; vertical-align: middle; }

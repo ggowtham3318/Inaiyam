@@ -52,7 +52,20 @@ export async function reviewPhoto(photoId: string, status: 'approved' | 'rejecte
   const { error } = await requireSupabase().functions.invoke('review-photo', {
     body: { photo_id: photoId, status, reason: reason || null },
   })
-  if (error) throw error
+  if (!error) return
+  const response = (error as Error & { context?: Response }).context
+  const body = response ? await response.clone().json().catch(() => null) as { error?: string } | null : null
+  const messages: Record<string, string> = {
+    ORIGIN_NOT_ALLOWED: 'This app address is not allowed to review photos. Add it to APP_ALLOWED_ORIGINS in the local Supabase function environment.',
+    AUTH_REQUIRED: 'Your login session has expired. Log in again and retry.',
+    STAFF_REQUIRED: 'Photo approval is limited to staff accounts.',
+    PHOTO_NOT_FOUND: 'This photo is no longer available for review.',
+    PHOTO_NOT_PENDING: 'This photo has already been reviewed.',
+    PHOTO_COPY_FAILED: 'The photo could not be moved to approved storage.',
+    PHOTO_REVIEW_FAILED: 'The review could not be saved. Check the Edge Function logs.',
+  }
+  if (body?.error && messages[body.error]) throw new Error(messages[body.error])
+  throw error
 }
 
 export async function getAdminReports() {

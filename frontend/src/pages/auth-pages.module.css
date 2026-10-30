@@ -52,3 +52,11 @@
 @media (max-width: 460px) { .authPage { padding-inline: 12px; }.authPage .card { padding: 22px 17px; }.fieldRow { grid-template-columns: 1fr; }.storyPanel { border-radius: 18px; }.card h1 { font-size: clamp(2rem, 10vw, 2.8rem); } }
 @media (max-width: 720px) { .page { flex-direction: column; gap: 22px; }.imagePlaceholder { aspect-ratio: 16 / 8; flex: 0 0 auto; max-height: 220px; width: min(100%, 470px); } }
 @media (max-width: 420px) { .page { min-height: 78vh; padding: 28px 14px; }.card { padding: 20px 16px; }.card h1 { font-size: clamp(2.2rem, 12vw, 3.2rem); }.card .button { min-height: 46px; width: 100%; } }
+.phoneInput { align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 11px; display: flex; min-height: 46px; }
+.phoneInput b { border-right: 1px solid var(--line); color: var(--maroon); padding: 0 12px; }
+.phoneInput input { background: transparent; border: 0; flex: 1; min-width: 0; outline: none; padding: 10px 12px; }
+.textButton { background: transparent; border: 0; color: var(--maroon); cursor: pointer; font: inherit; }
+.phoneInput { align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 11px; display: flex; min-height: 46px; }
+.phoneInput b { border-right: 1px solid var(--line); color: var(--maroon); padding: 0 12px; }
+.phoneInput input { background: transparent; border: 0; flex: 1; min-width: 0; outline: none; padding: 10px 12px; }
+.textButton { background: transparent; border: 0; color: var(--maroon); cursor: pointer; font: inherit; }

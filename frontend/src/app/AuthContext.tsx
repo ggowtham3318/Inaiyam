@@ -9,11 +9,16 @@ type AuthContextValue = {
   role: UserRole | null
   roleError: string | null
   loading: boolean
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>
+  signIn: (email: string, password: string) => Promise<{ error: Error | null; emailConfirmed: boolean; phoneConfirmed: boolean }>
   signUp: (email: string, password: string, policyVersion: string, profile?: { displayName?: string; gender?: string; dateOfBirth?: string }) => Promise<{ error: Error | null; needsConfirmation: boolean }>
   signOut: () => Promise<{ error: Error | null }>
   resetPasswordForEmail: (email: string) => Promise<{ error: Error | null }>
   updatePassword: (password: string) => Promise<{ error: Error | null }>
+  sendPhoneOtp: (phone: string) => Promise<{ error: Error | null }>
+  verifyOtp: (input: { email: string; token: string; type: 'signup' | 'email' | 'recovery' } | { phone: string; token: string; type: 'phone_change' | 'sms' }) => Promise<{ error: Error | null }>
+  resendEmailOtp: (email: string) => Promise<{ error: Error | null }>
+  requestPhoneRecovery: (phone: string) => Promise<{ error: Error | null }>
+  refreshUser: () => Promise<User | null>
 }
 
 const NOT_CONFIGURED = 'Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
@@ -89,9 +94,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     roleError,
     loading: loading || roleLoading,
     signIn: async (email, password) => {
-      if (!supabase) return { error: new Error(NOT_CONFIGURED) }
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      return { error }
+      if (!supabase) return { error: new Error(NOT_CONFIGURED), emailConfirmed: false, phoneConfirmed: false }
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      return { error, emailConfirmed: Boolean(data.user?.email_confirmed_at), phoneConfirmed: Boolean(data.user?.phone_confirmed_at) }
     },
     signUp: async (email, password, policyVersion, profile) => {
       if (!supabase) return { error: new Error(NOT_CONFIGURED), needsConfirmation: false }
@@ -127,6 +132,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!supabase) return { error: new Error(NOT_CONFIGURED) }
       const { error } = await supabase.auth.updateUser({ password })
       return { error }
+    },
+    sendPhoneOtp: async phone => {
+      if (!supabase) return { error: new Error(NOT_CONFIGURED) }
+      const { error } = await supabase.auth.updateUser({ phone })
+      return { error }
+    },
+    verifyOtp: async input => {
+      if (!supabase) return { error: new Error(NOT_CONFIGURED) }
+      const { error } = await supabase.auth.verifyOtp(input)
+      return { error }
+    },
+    resendEmailOtp: async email => {
+      if (!supabase) return { error: new Error(NOT_CONFIGURED) }
+      const { error } = await supabase.auth.resend({ type: 'signup', email })
+      return { error }
+    },
+    requestPhoneRecovery: async phone => {
+      if (!supabase) return { error: new Error(NOT_CONFIGURED) }
+      const { error } = await supabase.auth.signInWithOtp({ phone, options: { shouldCreateUser: false } })
+      return { error }
+    },
+    refreshUser: async () => {
+      if (!supabase) return null
+      const { data } = await supabase.auth.getUser()
+      return data.user
     },
   }), [loading, role, roleError, roleLoading, session])
 

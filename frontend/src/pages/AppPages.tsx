@@ -10,6 +10,7 @@ import { Card, Button, Input, Modal, Skeleton } from '../components/ui'
 import { getOwnProfile, requireSupabase } from '../lib/userData'
 import { useAuth as useUserAuth } from '../app/AuthContext'
 import styles from './app-pages.module.css'
+import { VerifiedBadge } from '../components/ui/VerifiedBadge'
 
 export function UserDashboard() {
   const { user } = useAuth()
@@ -66,7 +67,7 @@ export function SettingsPage() {
     reset(); setPasswordNotice('Your password was changed.')
   }
 
-  return <section className={styles.settingsPage}><span className={styles.eyebrow}>{BRAND_NAME}</span><h1>Settings</h1><p className={styles.lead}>Manage your password and account requests.</p>
+  return <section className={styles.settingsPage}><span className={styles.eyebrow}>{BRAND_NAME}</span><h1>Settings</h1><p className={styles.lead}>Manage your password and account requests.</p><Card className={styles.settingsCard}><h2>Account verification</h2><p>{user?.email}</p><VerifiedBadge verified={Boolean(user?.email_confirmed_at)} label="Email" />{!user?.email_confirmed_at && <Link to="/verify-otp" state={{ step: 'email', email: user?.email, login: true }}>Verify now</Link>}</Card>
     <Card className={styles.settingsCard}><h2>Change password</h2><form className={styles.settingsForm} onSubmit={handleSubmit(changePassword)} noValidate><Input label="New password" type="password" autoComplete="new-password" error={errors.password?.message} {...register('password')} /><Input label="Confirm new password" type="password" autoComplete="new-password" error={errors.confirmPassword?.message} {...register('confirmPassword')} />{passwordError && <p className={styles.settingsError} role="alert">{passwordError}</p>}{passwordNotice && <p className={styles.settingsSuccess} role="status">{passwordNotice}</p>}<Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving…' : 'Change password'}</Button></form></Card>
     <Card className={styles.settingsCard}><h2>Delete account</h2><p>Request deletion of your Inaiyam account and associated profile data. A staff member will review the request.</p>{requestError && <p className={styles.settingsError} role="alert">{requestError}</p>}{requestNotice && <p className={styles.settingsSuccess} role="status">{requestNotice}</p>}<Button variant="secondary" onClick={() => setConfirming(true)}>Request account deletion</Button></Card>
     <Modal title="Request account deletion?" open={confirming} onClose={() => setConfirming(false)}><div className={styles.settingsForm}><p>This submits a request for staff review. You can continue using your account while it is reviewed.</p>{requestError && <p className={styles.settingsError} role="alert">{requestError}</p>}<div className={styles.settingsActions}><Button variant="secondary" onClick={() => setConfirming(false)} disabled={requesting}>Cancel</Button><Button onClick={() => void requestDeletion()} disabled={requesting}>{requesting ? 'Submitting…' : 'Confirm request'}</Button></div></div></Modal>

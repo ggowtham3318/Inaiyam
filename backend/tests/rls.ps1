@@ -56,7 +56,7 @@ function Check($name, $condition) {
   else { Write-Output "FAIL $name"; $script:failures++ }
 }
 
-function Create-AdminUser($email, $password) {
+function Create-AdminUser($email, $password, $verifiedPhone = $true) {
   $headers = @{ apikey = $anonKey; Authorization = "Bearer $serviceKey"; "Content-Type" = "application/json" }
   $headers[("Author" + "ization")] = ("Bear" + "er " + $serviceKey)
   $body = @{
@@ -70,6 +70,12 @@ function Create-AdminUser($email, $password) {
       policy_version = "v1"
     }
   } | ConvertTo-Json -Depth 5
+  if ($verifiedPhone) {
+    $payload = $body | ConvertFrom-Json
+    $payload | Add-Member -NotePropertyName phone -NotePropertyValue "+91$((Get-Random -Minimum 1000000000 -Maximum 1999999999))"
+    $payload | Add-Member -NotePropertyName phone_confirm -NotePropertyValue $true
+    $body = $payload | ConvertTo-Json -Depth 5
+  }
   return Invoke-RestMethod -Method Post -Uri "$baseUrl/auth/v1/admin/users" -Headers $headers -Body $body
 }
 
@@ -109,6 +115,10 @@ try {
     if (-not $userId -and $user.user) { $userId = $user.user.id }
     $users[$name] = [pscustomobject]@{ Id = $userId; Email = $email; Token = (Login $email $password) }
   }
+  $unverified = Create-AdminUser "rls-test-unverified-$run@example.com" $password $false
+  $unverifiedId = $unverified.id
+  if (-not $unverifiedId -and $unverified.user) { $unverifiedId = $unverified.user.id }
+  $users["unverified"] = [pscustomobject]@{ Id = $unverifiedId; Email = $unverified.email; Token = (Login $unverified.email $password) }
 
   $staffHeaders = @{ apikey = $anonKey; Authorization = "Bearer $serviceKey"; "Content-Type" = "application/json"; "Content-Profile" = "app"; "Accept-Profile" = "app" }
   foreach ($role in @(@("staff", "moderator"), @("admin", "admin"))) {
@@ -122,6 +132,11 @@ try {
     $response = Call-Api "POST" "/rest/v1/user_contact_details" $serviceKey $contact
     Check "contact fixture $name" ($response.Status -eq 201 -or $response.Status -eq 200)
   }
+  $privateContact = Call-Api "GET" "/rest/v1/user_contact_details?user_id=eq.$($users['userB'].Id)&select=email,phone" $users["userA"].Token $null
+  Check "client cannot read another user's email or phone" (@($privateContact.Data).Count -eq 0 -or $privateContact.Status -ge 400)
+  Check "unverified user blocked from sending interest" ((Call-Api "POST" "/rest/v1/rpc/send_interest" $users["unverified"].Token @{ p_receiver_profile_id = $profiles["userB"] }).Status -ge 400)
+  Check "unverified user blocked from shortlist" ((Call-Api "POST" "/rest/v1/rpc/toggle_shortlist" $users["unverified"].Token @{ p_profile_id = $profiles["userB"] }).Status -ge 400)
+  Check "unverified user blocked from contact view" ((Call-Api "POST" "/rest/v1/rpc/get_contact_details" $users["unverified"].Token @{ p_target_user_id = $users["userB"].Id }).Status -ge 400)
 
   $profiles = @{}
   $lookupResult = Call-Api "GET" "/rest/v1/lookup_marital_statuses?select=id&is_active=eq.true&limit=1" $null $null
@@ -132,6 +147,8 @@ try {
     $profile = @($response.Data)[0]
     $profiles[$name] = $profile.id
     Check "signup creates draft profile $name" ($response.Status -eq 200 -and $profile.status -eq "draft")
+    $badge = Call-Api "GET" "/rest/v1/profiles?user_id=eq.$($users[$name].Id)&select=email_verified,phone_verified" $serviceKey $null
+    Check "auth verification syncs badge flags $name" (@($badge.Data)[0].email_verified -and @($badge.Data)[0].phone_verified)
     $consent = Call-Api "GET" "/rest/v1/consent_records?user_id=eq.$($users[$name].Id)&select=consent_type,policy_version,granted" $users[$name].Token $null
     Check "signup records versioned consent $name" ($consent.Status -eq 200 -and @($consent.Data).Count -eq 2 -and @($consent.Data | Where-Object { $_.policy_version -eq "v1" -and $_.granted }).Count -eq 2)
     $spoofConsent = Call-Api "POST" "/rest/v1/consent_records" $users[$name].Token @{ user_id = $users[$name].Id; consent_type = "terms_of_service"; policy_version = "fake"; granted = $true }
@@ -195,6 +212,7 @@ try {
 
   $interest = Call-Api "POST" "/rest/v1/rpc/send_interest" $users["userA"].Token @{ p_receiver_profile_id = $profiles["userB"]; p_message = "hello" }
   Check "send interest" ($interest.Status -eq 200)
+  Check "verified user can shortlist" ((Call-Api "POST" "/rest/v1/rpc/toggle_shortlist" $users["userA"].Token @{ p_profile_id = $profiles["userB"] }).Status -eq 200)
   $duplicate = Call-Api "POST" "/rest/v1/rpc/send_interest" $users["userA"].Token @{ p_receiver_profile_id = $profiles["userB"] }
   Check "duplicate interest blocked" ($duplicate.Status -ge 400)
   $spoof = Call-Api "POST" "/rest/v1/interests" $users["userA"].Token @{ sender_user_id = $users["userB"].Id; receiver_user_id = $users["userC"].Id }

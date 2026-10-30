@@ -15,6 +15,8 @@ export type PublicProfile = {
   about_me?: string | null
   marital_status_name?: string | null
   created_at: string
+  email_verified?: boolean
+  phone_verified?: boolean
 }
 
 export type ProfileCursor = { created_at: string; id: string }

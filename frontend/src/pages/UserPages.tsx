@@ -16,7 +16,7 @@ function DataState({ loading, error, children }: { loading: boolean; error: stri
 }
 
 function ProfileCard({ profile, shortlisted, onShortlist }: { profile: PublicProfile; shortlisted?: boolean; onShortlist?: () => void }) {
-  return <Card className={styles.profileCard}><div className={styles.profileImage}><Sparkles size={26} /></div><div className={styles.profileCardBody}><div className={styles.cardTitle}><div><h3>{profile.display_name || 'Inaiyam member'}</h3>{profile.age && <span>{profile.age} years</span>}</div>{onShortlist && <button className={styles.iconButton} aria-label={shortlisted ? 'Remove from shortlist' : 'Add to shortlist'} onClick={onShortlist}><Heart size={19} fill={shortlisted ? 'currentColor' : 'none'} /></button>}</div><div className={styles.facts}>{profile.city && <span><MapPin size={14} />{profile.city}</span>}{profile.education_name && <span>{profile.education_name}</span>}{profile.occupation && <span>{profile.occupation}</span>}</div><div className={styles.profileActions}><Link className={styles.viewLink} to={`/app/profile/${profile.id}`}>View profile <ArrowLeft size={15} className={styles.arrow} /></Link><Link className={styles.interestLink} to={`/app/profile/${profile.id}`}>Send interest</Link></div></div></Card>
+  return <Card className={styles.profileCard}><div className={styles.profileImage}><Sparkles size={26} /></div><div className={styles.profileCardBody}><div className={styles.cardTitle}><div><h3>{profile.display_name || 'Inaiyam member'}{profile.email_verified && profile.phone_verified && <span className={styles.verifiedTick} title="Email and phone verified" aria-label="Email and phone verified"><CheckCircle2 size={17} /></span>}</h3>{profile.age && <span>{profile.age} years</span>}</div>{onShortlist && <button className={styles.iconButton} aria-label={shortlisted ? 'Remove from shortlist' : 'Add to shortlist'} onClick={onShortlist}><Heart size={19} fill={shortlisted ? 'currentColor' : 'none'} /></button>}</div><div className={styles.facts}>{profile.city && <span><MapPin size={14} />{profile.city}</span>}{profile.education_name && <span>{profile.education_name}</span>}{profile.occupation && <span>{profile.occupation}</span>}</div><div className={styles.profileActions}><Link className={styles.viewLink} to={`/app/profile/${profile.id}`}>View profile <ArrowLeft size={15} className={styles.arrow} /></Link><Link className={styles.interestLink} to={`/app/profile/${profile.id}`}>Send interest</Link></div></div></Card>
 }
 
 function getProfileSearchError(cause: unknown) {
@@ -89,6 +89,8 @@ export function SearchPage() {
 
 const profileSchema = z.object({
   display_name: z.string().trim().min(2, 'Tell us the name families should see.').max(120),
+  mobile_number: z.string().optional().refine(value => !value || /^[6-9]\d{9}$/.test(value), 'Enter a valid 10-digit Indian mobile number.'),
+  full_address: z.string().trim().min(10, 'Enter your full address.').max(1000, 'Address must be 1,000 characters or fewer.'),
   date_of_birth: z.string().refine(value => {
     const date = new Date(`${value}T00:00:00`)
     const today = new Date()
@@ -106,6 +108,13 @@ const profileSchema = z.object({
 })
 type ProfileForm = z.infer<typeof profileSchema>
 type Lookup = { id: string; code: string; name: string }
+const indiaStatesAndTerritories = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh',
+  'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland',
+  'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir',
+  'Ladakh', 'Lakshadweep', 'Puducherry',
+]
 const maritalStatusLabels: Record<string, string> = {
   never_married: 'Single',
   divorced: 'Divorced',
@@ -117,10 +126,10 @@ export function MyProfilePage() {
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [notice, setNotice] = useState('')
   const [maritalStatuses, setMaritalStatuses] = useState<Lookup[]>([]); const [photos, setPhotos] = useState<{ id?: string; path: string; status: string; preview: string }[]>([])
-  const { register, control, reset, getValues, getFieldState, watch, trigger, formState: { errors } } = useForm<ProfileForm>({ resolver: zodResolver(profileSchema), defaultValues: { country: 'India', gender: 'other', marital_status_id: '', partner_preferences: '' } })
+  const { register, control, reset, getValues, getFieldState, watch, trigger, formState: { errors } } = useForm<ProfileForm>({ resolver: zodResolver(profileSchema), defaultValues: { country: 'India', gender: 'other', marital_status_id: '', mobile_number: '', full_address: '', partner_preferences: '' } })
   const values = watch()
-  const completed = [values.display_name, values.date_of_birth, values.gender, values.marital_status_id, values.city, values.state, values.occupation, values.about_me, values.partner_preferences].filter(Boolean).length
-  const completion = Math.round((completed / 9) * 100)
+  const completed = [values.display_name, values.date_of_birth, values.gender, values.marital_status_id, values.city, values.state, values.full_address, values.occupation, values.about_me, values.partner_preferences].filter(Boolean).length
+  const completion = Math.round((completed / 10) * 100)
 
   useEffect(() => {
     if (!user) return
@@ -143,6 +152,8 @@ export function MyProfilePage() {
           ...data,
           display_name: data.display_name ?? '',
           date_of_birth: data.date_of_birth ?? '',
+          mobile_number: String(data.mobile_number ?? '').replace(/^\+91/, ''),
+          full_address: data.full_address ?? '',
           gender: data.gender ?? 'other',
           marital_status_id: data.marital_status_id ?? '',
           country: data.country ?? 'India',
@@ -169,6 +180,8 @@ export function MyProfilePage() {
     const client = requireSupabase()
     const { data, error: saveError } = await client.from('profiles').update({
       display_name: valuesToSave.display_name, date_of_birth: valuesToSave.date_of_birth || null, gender: valuesToSave.gender,
+      mobile_number: valuesToSave.mobile_number ? `+91${valuesToSave.mobile_number}` : null,
+      full_address: valuesToSave.full_address,
       marital_status_id: valuesToSave.marital_status_id || null, city: valuesToSave.city, state: valuesToSave.state,
       country: valuesToSave.country, occupation: valuesToSave.occupation, about_me: valuesToSave.about_me,
     }).eq('user_id', user.id).select().single()
@@ -182,6 +195,7 @@ export function MyProfilePage() {
   }
   async function save() {
     setError(''); setNotice('')
+    if (!await trigger('mobile_number')) return
     try { await saveDraft(); setNotice('Your draft has been saved.') } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save your draft.') }
   }
   async function submitForReview() {
@@ -190,6 +204,7 @@ export function MyProfilePage() {
     if (!valid) {
       const fields: { name: keyof ProfileForm; label: string }[] = [
         { name: 'display_name', label: 'Display name' },
+        { name: 'full_address', label: 'Full address' },
         { name: 'date_of_birth', label: 'Date of birth' },
         { name: 'gender', label: 'Gender' },
         { name: 'marital_status_id', label: 'Marital status' },
@@ -270,8 +285,10 @@ export function MyProfilePage() {
         <section className={styles.profileSection}>
           <h2>Basic information</h2>
           <div className={styles.twoCol}>
-            <Input label="Display name" hint="This is the name shown on your public profile." error={errors.display_name?.message} {...register('display_name')} />
+            <Input label="Display name" error={errors.display_name?.message} {...register('display_name')} />
             <Input label="Date of birth" type="date" error={errors.date_of_birth?.message} {...register('date_of_birth')} />
+            <div className={styles.emailField}><Input label="Email address" type="email" value={user?.email ?? ''} readOnly />{user?.email_confirmed_at && <span className={styles.verifiedTick} title="Email verified" aria-label="Email verified"><CheckCircle2 size={17} /></span>}</div>
+            <Input label="Mobile number" type="tel" inputMode="numeric" autoComplete="tel-national" maxLength={10} pattern="[0-9]{10}" error={errors.mobile_number?.message} {...register('mobile_number', { onChange: event => { event.target.value = event.target.value.replace(/\D/g, '').slice(0, 10) } })} />
             <div><Select label="Profile gender" {...register('gender')}><option value="other">Prefer to describe later</option><option value="female">Woman</option><option value="male">Man</option></Select>{errors.gender && <small className={styles.error}>{errors.gender.message}</small>}</div>
             <div><Controller control={control} name="marital_status_id" render={({ field }) => <Select label="Marital status" name={field.name} value={field.value ?? ''} onBlur={field.onBlur} onChange={field.onChange} ref={field.ref}><option value="">Choose one</option>{maritalStatuses.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</Select>} />{errors.marital_status_id && <small className={styles.error}>{errors.marital_status_id.message}</small>}</div>
           </div>
@@ -280,10 +297,11 @@ export function MyProfilePage() {
           <h2>Location and work</h2>
           <div className={styles.twoCol}>
             <Input label="City" error={errors.city?.message} {...register('city')} />
-            <Input label="State" error={errors.state?.message} {...register('state')} />
+            <div><Select label="State / Union Territory" {...register('state')}><option value="">Choose a state or union territory</option>{indiaStatesAndTerritories.map(stateName => <option value={stateName} key={stateName}>{stateName}</option>)}</Select>{errors.state && <small className={styles.error}>{errors.state.message}</small>}</div>
             <Input label="Country" error={errors.country?.message} {...register('country')} />
             <Input label="Occupation" error={errors.occupation?.message} {...register('occupation')} />
           </div>
+          <label className={styles.textareaLabel}>Full address<textarea rows={3} aria-invalid={Boolean(errors.full_address)} {...register('full_address')} />{errors.full_address && <span className={styles.error}>{errors.full_address.message}</span>}</label>
         </section>
         <section className={styles.profileSection}>
           <h2>About you</h2>
@@ -295,7 +313,7 @@ export function MyProfilePage() {
         </section>
         <section className={`${styles.profileSection} ${styles.photoStep}`}>
           <h2>Profile photo</h2>
-          <div className={styles.photoIntro}><Upload size={22} /><div><h3>Add a photo (optional)</h3><p>Your photo will be reviewed before it appears to other members.</p></div></div>
+          <div className={styles.photoIntro}><Upload size={22} /><div><h3>Add a photo</h3><p>Your photo will be reviewed before it appears to other members.</p></div></div>
           <label className={styles.uploadBox}><Upload size={22} /><span>Choose a photo</span><small>JPG, PNG or WEBP · up to 5 MB</small><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.target.files?.[0]; if (file) void uploadPhoto(file); event.currentTarget.value = '' }} /></label>
           <div className={styles.photoGrid}>{photos.map(photo => <div className={styles.photoItem} key={photo.id || photo.path}>{photo.preview ? <img src={photo.preview} alt="Your profile upload" /> : <div className={styles.photoUnavailable}>Preview unavailable</div>}<span>{photo.status === 'pending' ? 'Waiting for review' : photo.status}</span><button type="button" aria-label="Remove photo" onClick={() => void removePhoto(photo)}><X size={15} /></button></div>)}</div>
         </section>

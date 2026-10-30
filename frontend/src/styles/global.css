@@ -16,3 +16,6 @@ img { height: auto; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+.verifiedBadge, .unverifiedBadge { align-items: center; display: inline-flex; font-size: 13px; gap: 5px; margin: 0 10px 8px 0; }
+.verifiedBadge { color: #247a45; }
+.unverifiedBadge { color: #837b80; }
