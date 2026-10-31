@@ -243,14 +243,14 @@ export function MyProfilePage() {
     const path = `${user.id}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '-')}`
     let uploaded = false
     try {
-      const client = requireSupabase(); const upload = await client.storage.from('photos-pending').upload(path, file, { upsert: false })
+      const client = requireSupabase(); const upload = await client.storage.from('photos-approved').upload(path, file, { upsert: false })
       if (upload.error) throw upload.error
       uploaded = true
       const { data, error: photoError } = await client.rpc('add_profile_photo', { p_profile_id: profile.id, p_storage_path: path, p_is_primary: photos.length === 0, p_is_blurred: false, p_is_private: false })
       if (photoError) throw photoError
-      setPhotos(current => [...current, { id: data.id, path, status: 'pending', preview: URL.createObjectURL(file) }]); setNotice('Photo uploaded and waiting for review.')
+      setPhotos(current => [...current, { id: data.id, path, status: 'approved', preview: URL.createObjectURL(file) }]); setNotice('Photo uploaded and added to your profile.')
     } catch (cause) {
-      if (uploaded) await requireSupabase().storage.from('photos-pending').remove([path])
+      if (uploaded) await requireSupabase().storage.from('photos-approved').remove([path])
       setError(cause instanceof Error ? cause.message : 'Unable to upload this photo.')
     }
   }
@@ -313,9 +313,9 @@ export function MyProfilePage() {
         </section>
         <section className={`${styles.profileSection} ${styles.photoStep}`}>
           <h2>Profile photo</h2>
-          <div className={styles.photoIntro}><Upload size={22} /><div><h3>Add a photo</h3><p>Your photo will be reviewed before it appears to other members.</p></div></div>
+          <div className={styles.photoIntro}><Upload size={22} /><div><h3>Add a photo</h3><p>Your photo appears on your profile as soon as it is uploaded.</p></div></div>
           <label className={styles.uploadBox}><Upload size={22} /><span>Choose a photo</span><small>JPG, PNG or WEBP · up to 5 MB</small><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.target.files?.[0]; if (file) void uploadPhoto(file); event.currentTarget.value = '' }} /></label>
-          <div className={styles.photoGrid}>{photos.map(photo => <div className={styles.photoItem} key={photo.id || photo.path}>{photo.preview ? <img src={photo.preview} alt="Your profile upload" /> : <div className={styles.photoUnavailable}>Preview unavailable</div>}<span>{photo.status === 'pending' ? 'Waiting for review' : photo.status}</span><button type="button" aria-label="Remove photo" onClick={() => void removePhoto(photo)}><X size={15} /></button></div>)}</div>
+          <div className={styles.photoGrid}>{photos.map(photo => <div className={styles.photoItem} key={photo.id || photo.path}>{photo.preview ? <img src={photo.preview} alt="Your profile upload" /> : <div className={styles.photoUnavailable}>Preview unavailable</div>}<span>{photo.status === 'approved' ? 'On profile' : photo.status}</span><button type="button" aria-label="Remove photo" onClick={() => void removePhoto(photo)}><X size={15} /></button></div>)}</div>
         </section>
         {error && <p className={styles.error} role="alert">{error}</p>}
         {notice && <p className={styles.success} role="status">{notice}</p>}

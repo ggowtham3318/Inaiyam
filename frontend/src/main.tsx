@@ -14,7 +14,7 @@ import { DesignSystem } from './pages/DesignSystem'
 import { Home, SimplePublicPage } from './pages/PublicPages'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
 import { InterestsPage, MyProfilePage, ProfileDetailPage, SearchPage, ShortlistPage } from './pages/UserPages'
-import { AdminApprovalsPage, AdminContactMessagesPage, AdminDashboardPage, AdminDeletionRequestsPage, AdminPhotosPage, AdminReportsPage, AdminUsersPage } from './pages/AdminPages'
+import { AdminApprovalsPage, AdminContactMessagesPage, AdminDashboardPage, AdminDeletionRequestsPage, AdminReportsPage, AdminUsersPage } from './pages/AdminPages'
 import './styles/global.css'
 
 const queryClient = new QueryClient()
@@ -56,7 +56,6 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/admin" element={<AdminDashboardPage />} />
               <Route path="/admin/users" element={<AdminUsersPage />} />
               <Route path="/admin/approvals" element={<AdminApprovalsPage />} />
-              <Route path="/admin/photos" element={<AdminPhotosPage />} />
               <Route path="/admin/reports" element={<AdminReportsPage />} />
               <Route path="/admin/deletions" element={<AdminDeletionRequestsPage />} />
               <Route path="/admin/messages" element={<AdminContactMessagesPage />} />

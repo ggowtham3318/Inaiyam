@@ -28,11 +28,24 @@ type FormValues = z.infer<typeof schema>
 function signupErrorMessage(error: Error) {
   const detail = error.message.toLowerCase()
   const code = (error as Error & { code?: string }).code?.toLowerCase()
-  if (code === 'user_already_exists' || code === 'email_exists' || detail.includes('already registered') || detail.includes('already exists')) {
-    return 'We could not create your account with those details. Please check them and try again.'
+  const status = (error as Error & { status?: number }).status
+  if (
+    code === 'user_already_exists' || code === 'email_exists' || code === 'user_already_registered' ||
+    detail.includes('already registered') || detail.includes('already exists') || detail.includes('user exists')
+  ) {
+    return 'An account with this email already exists. Log in or reset your password.'
   }
   if (detail.includes('database error saving new user') || detail.includes('consent_required') || detail.includes('database')) {
-    return 'Account setup failed on the server. Apply the latest Supabase migrations and try again.'
+    return 'Signup setup failed in Supabase. Apply all pending migrations to the hosted project with `supabase db push`, then try again. Do not reset the production database.'
+  }
+  if (status === 500) {
+    return 'Supabase could not complete signup. Check the hosted project’s Auth logs and apply any pending migrations before retrying.'
+  }
+  if (detail.includes('email address not authorized')) {
+    return 'Supabase is not allowed to email this address yet. Configure custom SMTP in the hosted project, or test with an address authorized for the project.'
+  }
+  if (detail.includes('rate limit') || detail.includes('too many requests')) {
+    return 'Too many signup or email requests were made. Wait a few minutes and try again.'
   }
   if (detail.includes('fetch') || detail.includes('network') || detail.includes('failed to connect')) {
     return 'Could not reach Supabase. Start the local Supabase services and try again.'
@@ -129,7 +142,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           {locationState?.notice && !serverError && !success && <p className={styles.success} role="status">{locationState.notice}</p>}
           {serverError && <><p className={styles.error} role="alert">{serverError}</p>{mode === 'register' && <p className={styles.switch}><Link to="/login">Try logging in</Link> · <Link to="/forgot-password">Reset your password</Link></p>}</>}
           {success && <p className={styles.success} role="status">{success}</p>}
-          <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'}</Button>
+          <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account & send code'}</Button>
         </form>
         <p className={styles.switch}>
           {mode === 'login' ? `New to ${BRAND_NAME}?` : 'Already have an account?'}{' '}

@@ -1,15 +1,13 @@
-import { getPhotoPreviewUrl, requireSupabase } from './userData'
+import { requireSupabase } from './userData'
 
 export type AdminStats = {
   total_profiles: number
   pending_profiles: number
-  pending_photos: number
   open_reports: number
 }
 
 export type AdminUser = { user_id: string; email: string; status: string; created_at: string }
 export type PendingProfile = { id: string; user_id: string; display_name: string | null; status: string; city: string | null; created_at: string }
-export type PendingPhoto = { id: string; profile_id: string; uploaded_by: string; storage_bucket: string; storage_path: string; status: string; created_at: string; preview_url: string }
 export type AdminReport = { id: string; reporter_user_id: string; reported_user_id: string; category: string; description: string; status: string; resolution_notes: string | null; created_at: string }
 export type AdminDeletionRequest = { id: string; user_id: string; status: string; reason: string | null; requested_at: string; completed_at: string | null }
 export type AdminContactMessage = { id: string; name: string; email: string; message: string; created_at: string; handled_at: string | null }
@@ -34,38 +32,9 @@ export async function getPendingProfiles() {
   return (data ?? []) as PendingProfile[]
 }
 
-export async function getPendingPhotos() {
-  const { data, error } = await requireSupabase().rpc('admin_list_pending_photos')
-  if (error) throw error
-  return Promise.all(((data ?? []) as Omit<PendingPhoto, 'preview_url'>[]).map(async photo => ({
-    ...photo,
-    preview_url: await getPhotoPreviewUrl(photo.storage_bucket, photo.storage_path),
-  })))
-}
-
 export async function setProfileStatus(profileId: string, status: 'approved' | 'rejected' | 'suspended' | 'deleted', reason?: string) {
   const { error } = await requireSupabase().rpc('admin_set_profile_status', { p_profile_id: profileId, p_status: status, p_reason: reason || null })
   if (error) throw error
-}
-
-export async function reviewPhoto(photoId: string, status: 'approved' | 'rejected', reason?: string) {
-  const { error } = await requireSupabase().functions.invoke('review-photo', {
-    body: { photo_id: photoId, status, reason: reason || null },
-  })
-  if (!error) return
-  const response = (error as Error & { context?: Response }).context
-  const body = response ? await response.clone().json().catch(() => null) as { error?: string } | null : null
-  const messages: Record<string, string> = {
-    ORIGIN_NOT_ALLOWED: 'This app address is not allowed to review photos. Add it to APP_ALLOWED_ORIGINS in the local Supabase function environment.',
-    AUTH_REQUIRED: 'Your login session has expired. Log in again and retry.',
-    STAFF_REQUIRED: 'Photo approval is limited to staff accounts.',
-    PHOTO_NOT_FOUND: 'This photo is no longer available for review.',
-    PHOTO_NOT_PENDING: 'This photo has already been reviewed.',
-    PHOTO_COPY_FAILED: 'The photo could not be moved to approved storage.',
-    PHOTO_REVIEW_FAILED: 'The review could not be saved. Check the Edge Function logs.',
-  }
-  if (body?.error && messages[body.error]) throw new Error(messages[body.error])
-  throw error
 }
 
 export async function getAdminReports() {
