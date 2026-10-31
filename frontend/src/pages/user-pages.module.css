@@ -11,3 +11,7 @@
 .emailField input { padding-right: 40px; }
 .emailField .verifiedTick { bottom: 15px; margin: 0; position: absolute; right: 12px; }
 .verifiedTick { color: #25804b; display: inline-flex; margin-left: 6px; vertical-align: middle; }
+
+.profileImage img, .detailPhoto img { height: 100%; object-fit: cover; width: 100%; }
+
+.primaryPhoto { align-items: center; background: linear-gradient(135deg, #ffe2ed, #fff5ed); border-radius: 50%; color: var(--kumkum); display: flex; height: 132px; justify-content: center; overflow: hidden; width: 132px; }.primaryPhoto img { height: 100%; object-fit: cover; width: 100%; }
